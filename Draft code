@@ -1,0 +1,62 @@
+library(GGally)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(MASS)
+library(caret)
+
+
+
+data <- read_csv("C:/Users/Jackw/OneDrive/桌面/STAT425/FF425/StudentsHabits.csv")
+
+
+
+datamuate <- data %>%
+  mutate(
+    gender = recode(gender, "Male" = 0,"Female" = 1, "Other" = 0),
+    diet_quality = recode(diet_quality, "Poor" = 0,"Fair" = 1, "Good" = 2),
+    parental_education_level = recode(parental_education_level, "None" = 0,"High School" = 1, "Bachelor" = 2,"Master" = 3),
+    internet_quality = recode(internet_quality, "Poor" = 0,"Average" = 1, "Good" = 2)
+  )
+
+n <- nrow(data); n
+ggpairs(data[,c(3,4,5,8)])
+ggplot(data) + 
+  geom_point(aes(y = exam_score, x  = study_hours_per_day)) +
+  facet_grid(vars(part_time_job), vars(diet_quality))
+names(data)
+
+
+model = lm(exam_score ~ age + study_hours_per_day+
+           social_media_hours+
+           netflix_hours+
+           attendance_percentage+
+           sleep_hours
+           , data = datamuate)
+summary(model)
+reduced = lm(exam_score ~ study_hours_per_day+
+                       social_media_hours+
+                       attendance_percentage+
+                       sleep_hours
+                     , data = datamuate)
+anova(reduced,model)
+
+step_model <- stepAIC(model, direction = "both")
+summary(step_model)
+
+
+
+# 1. Define the time-related predictors
+time_vars = dplyr::select(data, study_hours_per_day, social_media_hours, netflix_hours, sleep_hours,
+                          attendance_percentage)
+
+
+# 2. Standardize and run PCA
+pca_model <- prcomp(time_vars, center = TRUE, scale. = TRUE)
+
+# 3. Check how much variance each PC explains
+summary(pca_model)
+
+# 4. Extract the principal component scores (the rotated data)
+pc_scores <- as.data.frame(pca_model$x[, 1:4])
+colnames(pc_scores) <- c("PC_effort_1", "PC_effort_2", "PC_effort_3", "PC_effort_4")
