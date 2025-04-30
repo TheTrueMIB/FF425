@@ -1,0 +1,37 @@
+library(MASS)
+
+model_cubic <- lm(
+  exam_score ~ 
+    age + I(age^2) + I(age^3) +
+    PC_effort_1 + I(PC_effort_1^2) + I(PC_effort_1^3) +
+    PC_effort_2 + I(PC_effort_2^2) + I(PC_effort_2^3) +
+    PC_effort_3 + I(PC_effort_3^2) + I(PC_effort_3^3) +
+    attendance_percentage + I(attendance_percentage^2) + I(attendance_percentage^3) +
+    diet_quality + I(diet_quality^2) +
+    exercise_frequency + I(exercise_frequency^2) +
+    parental_education_level + I(parental_education_level^2) +
+    mental_health_rating + I(mental_health_rating^2) +
+    internet_quality + I(internet_quality^2) +
+    extracurricular_participation + part_time_job + gender,
+  data = datamutate
+)
+
+
+summary(model_cubic)
+
+
+model_interaction <- lm(
+  exam_score ~ 
+    (age + PC_effort_1+PC_effort_2+PC_effort_3+
+       attendance_percentage +
+       diet_quality + exercise_frequency + parental_education_level + 
+       mental_health_rating + internet_quality +
+       extracurricular_participation + part_time_job + gender)^2,
+  data = datamutate
+)
+
+summary(model_interaction)
+
+
+model_selected <- stepAIC(model_interaction, direction = "both", trace = TRUE)
+summary(model_selected)
