@@ -1,0 +1,53 @@
+library(glmnet)
+
+par(mfrow = c(2, 2))
+plot(final_model)
+
+
+
+shapiro.test(residuals(final_model))
+
+
+
+cooksd <- cooks.distance(final_model)
+plot(cooksd, type = "h", main = "Cook's Distance", ylab = "Cook's D")
+abline(h = 4/length(cooksd), col = "red", lty = 2)
+
+
+
+
+
+# Lasso tryouts
+X <- model.matrix(
+  exam_score ~ 
+    (PC_effort_1 + PC_effort_2 + PC_effort_3 +
+       diet_quality + exercise_frequency + parental_education_level + 
+       mental_health_rating + internet_quality +
+       extracurricular_participation + part_time_job + gender)^2 +
+    I(diet_quality^2),
+  data = datamutate
+)[, -1]  # remove intercept
+
+# Create response vector
+y <- datamutate$exam_score
+
+# Run LASSO with CV
+cv_lasso <- cv.glmnet(X, y, alpha = 1)
+
+# View results
+cv_lasso$lambda.min
+coef(cv_lasso, s = "lambda.min")
+
+
+#Ridge
+
+#  Fit Ridge model (alpha = 0)
+cv_ridge <- cv.glmnet(X, y, alpha = 0)
+
+# Check optimal lambda
+cv_ridge$lambda.min
+
+
+y_hat_ridge <- predict(cv_ridge, newx = X, s = "lambda.min")
+ridge_r2 <- cor(y, y_hat_ridge)^2
+print(ridge_r2)
