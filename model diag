@@ -1,0 +1,12 @@
+par(mfrow = c(2, 2))
+plot(final_model)
+
+
+
+shapiro.test(residuals(final_model))
+
+
+
+cooksd <- cooks.distance(final_model)
+plot(cooksd, type = "h", main = "Cook's Distance", ylab = "Cook's D")
+abline(h = 4/length(cooksd), col = "red", lty = 2)
