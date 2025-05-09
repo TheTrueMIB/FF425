@@ -1,7 +1,10 @@
-library(MASS)
-library(olsrr)
-library(caret)
-library(car)
+# Load necessary libraries for modeling and diagnostics
+library(MASS)        # For stepAIC and boxcox
+library(olsrr)       # For p-value based stepwise selection
+library(caret)       # For cross-validation
+library(car)         # For VIF diagnostics
+
+# Fit polynomial regression model with cubic terms for PCs and other squared predictors
 model_cubic <- lm(
   exam_score ~ 
     PC_effort_1 + I(PC_effort_1^2) + I(PC_effort_1^3) +
@@ -16,56 +19,45 @@ model_cubic <- lm(
     extracurricular_participation + part_time_job + gender,
   data = datamutate
 )
+summary(model_cubic)   # Summarize the cubic regression model
 
-
-summary(model_cubic)
-
-
+# Fit full interaction model including all two-way interactions + quadratic term
 model_interaction <- lm(
   exam_score ~ 
     (PC_effort_1+PC_effort_2+PC_effort_3+
-       diet_quality + exercise_frequency + parental_education_level + 
-       mental_health_rating + internet_quality +
-       extracurricular_participation + part_time_job + gender)^2 +
+     diet_quality + exercise_frequency + parental_education_level + 
+     mental_health_rating + internet_quality +
+     extracurricular_participation + part_time_job + gender)^2 +
     I(diet_quality^2),
   data = datamutate
 )
+summary(model_interaction)   # View full interaction model
 
-summary(model_interaction)
-
-
+# Apply AIC-based stepwise selection to reduce model complexity
 model_selected <- stepAIC(model_interaction, direction = "both", trace = TRUE)
-summary(model_selected)
+summary(model_selected)      # View selected model
 
-
+# Perform p-value based stepwise selection
 model_pval_selected <- ols_step_both_p(model_selected, prem = 0.05, prem = 0.01)
+summary(model_pval_selected$model)   # View p-value selected model
+final_model <- model_pval_selected$model  # Assign to final_model
 
-summary(model_pval_selected$model)
-final_model <- model_pval_selected$model
-
-
-# Define 10-fold cross-validation
+# Cross-validation setup for final model
 train_control <- trainControl(method = "cv", number = 10)
-
-# Refit using caret's train (must re-specify the formula)
 model_cv <- train(
-  formula(final_model),  # reuse the exact same formula
+  formula(final_model),  # Use selected model formula
   data = datamutate,
   method = "lm",
   trControl = train_control
 )
 
-# View cross-validated results
-print(model_cv)
+# Evaluate model performance and diagnostics
+print(model_cv)        # View CV results
+vif(final_model)       # Check multicollinearity via VIF
+summary(model_cv)      # Detailed CV summary
+summary(final_model)   # Final model summary
 
-vif(final_model)
-
-summary(model_cv)
-
-summary(final_model)
-
-
-# Box-cox trying
+# Attempt Box-Cox transformation for better residual normality
 final_model_lm <- lm(
   exam_score ~ 
     PC_effort_2 + PC_effort_3 + mental_health_rating + exercise_frequency +
@@ -73,31 +65,26 @@ final_model_lm <- lm(
   data = datamutate
 )
 
+boxcox(final_model_lm, lambda = seq(-3, 4, 0.1))  # Explore transformation
 
-boxcox(final_model_lm, lambda = seq(-3, 4, 0.1))
-
-
-
+# Apply Box-Cox transformation with lambda ~ 3.2
 lambda <- 3.2
-datamutate$exam_score_bc <- (datamutate$exam_score^lambda - 1) / lambda
+datamutate$exam_score_bc <- (datamutate$exam_score^lambda - 1) / lambda  # Transformed target
 
-
+# Refit interaction model using Box-Cox transformed response
 model_interactionbc <- lm(
   exam_score_bc ~ 
     (PC_effort_1+PC_effort_2+PC_effort_3+
-       diet_quality + exercise_frequency + parental_education_level + 
-       mental_health_rating + internet_quality +
-       extracurricular_participation + part_time_job + gender)^2 +
+     diet_quality + exercise_frequency + parental_education_level + 
+     mental_health_rating + internet_quality +
+     extracurricular_participation + part_time_job + gender)^2 +
     I(diet_quality^2),
   data = datamutate
 )
+summary(model_interactionbc)   # Summarize transformed interaction model
 
-summary(model_interactionbc)
-
-
+# Stepwise AIC selection on transformed model
 model_selectedbc <- stepAIC(model_interactionbc, direction = "both", trace = TRUE)
-summary(model_selectedbc)
+summary(model_selectedbc)      # Final Box-Cox selected model summary
 
-
-summary(model_selectedbc)
 
