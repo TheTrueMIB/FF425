@@ -1,23 +1,27 @@
+# Load glmnet for LASSO and Ridge regression
 library(glmnet)
 
+# Diagnostic plots for the final linear model
 par(mfrow = c(2, 2))
-plot(final_model)
+plot(final_model)  # Residuals vs fitted, Q-Q, Scale-location, and leverage
 
+# Diagnostic plots for the Box-Cox transformed model
+par(mfrow = c(2, 2))
+plot(model_selectedbc)
 
+# Shapiro-Wilk test for normality of residuals
+shapiro.test(residuals(final_model))  # Test residual normality (p < 0.05 → not normal)
 
-shapiro.test(residuals(final_model))
-
-
-
+# Plot Cook's Distance to check for influential points
 cooksd <- cooks.distance(final_model)
 plot(cooksd, type = "h", main = "Cook's Distance", ylab = "Cook's D")
-abline(h = 4/length(cooksd), col = "red", lty = 2)
+abline(h = 4/length(cooksd), col = "red", lty = 2)  # Threshold line for influence
 
 
 
+# ===== LASSO Regression =====
 
-
-# Lasso tryouts
+# Construct model matrix including main effects, interactions, and squared term
 X <- model.matrix(
   exam_score ~ 
     (PC_effort_1 + PC_effort_2 + PC_effort_3 +
@@ -26,28 +30,34 @@ X <- model.matrix(
        extracurricular_participation + part_time_job + gender)^2 +
     I(diet_quality^2),
   data = datamutate
-)[, -1]  # remove intercept
+)[, -1]  # Remove intercept column
 
 # Create response vector
 y <- datamutate$exam_score
 
-# Run LASSO with CV
+# Run LASSO (alpha = 1) with 10-fold cross-validation
 cv_lasso <- cv.glmnet(X, y, alpha = 1)
 
-# View results
-cv_lasso$lambda.min
+# Output best lambda value
+cv_lasso$lambda.min  # Optimal L1 penalty
+
+# Display coefficients at best lambda
 coef(cv_lasso, s = "lambda.min")
 
 
-#Ridge
 
-#  Fit Ridge model (alpha = 0)
+# ===== Ridge Regression =====
+
+# Fit Ridge model (alpha = 0) with 10-fold cross-validation
 cv_ridge <- cv.glmnet(X, y, alpha = 0)
 
-# Check optimal lambda
+# Display best lambda for Ridge
 cv_ridge$lambda.min
 
-
+# Predict exam scores using optimal lambda
 y_hat_ridge <- predict(cv_ridge, newx = X, s = "lambda.min")
+
+# Calculate R-squared from predicted vs actual scores
 ridge_r2 <- cor(y, y_hat_ridge)^2
-print(ridge_r2)
+print(ridge_r2)  # Display R² of Ridge model
+
