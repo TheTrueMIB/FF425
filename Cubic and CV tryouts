@@ -1,4 +1,4 @@
-library(mass)
+library(MASS)
 library(olsrr)
 library(caret)
 library(car)
@@ -61,3 +61,43 @@ print(model_cv)
 vif(final_model)
 
 summary(model_cv)
+
+summary(final_model)
+
+
+# Box-cox trying
+final_model_lm <- lm(
+  exam_score ~ 
+    PC_effort_2 + PC_effort_3 + mental_health_rating + exercise_frequency +
+    part_time_job + part_time_job:PC_effort_1,
+  data = datamutate
+)
+
+
+boxcox(final_model_lm, lambda = seq(-3, 4, 0.1))
+
+
+
+lambda <- 3.2
+datamutate$exam_score_bc <- (datamutate$exam_score^lambda - 1) / lambda
+
+
+model_interactionbc <- lm(
+  exam_score_bc ~ 
+    (PC_effort_1+PC_effort_2+PC_effort_3+
+       diet_quality + exercise_frequency + parental_education_level + 
+       mental_health_rating + internet_quality +
+       extracurricular_participation + part_time_job + gender)^2 +
+    I(diet_quality^2),
+  data = datamutate
+)
+
+summary(model_interactionbc)
+
+
+model_selectedbc <- stepAIC(model_interactionbc, direction = "both", trace = TRUE)
+summary(model_selectedbc)
+
+
+summary(model_selectedbc)
+
