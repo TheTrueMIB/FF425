@@ -1,0 +1,30 @@
+---
+title: "Final Project"
+author: "Zhihui Chen"
+date: "2025-05-12"
+output: pdf_document
+---
+**Group member Contribution**: 
+
+  - Alice (EDA and modeling)
+  
+  - Bob (model diagnostics and model comparisons)
+  
+  - Carol (conclusion and report preparation)
+  
+```{r setup, include=FALSE}
+library(GGally)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(MASS)
+library(caret)
+library(olsrr)
+library(car)
+library(lmtest)
+library(glmnet)
+```
+
+# Abstract
+
+This project explores the factors influencing students’ exam performance using a behavioral and demographic dataset of 1000 observations. We begin with exploratory analysis and initial linear regression, then address multicollinearity among time-use variables (study hours, sleep, etc.) through Principal Component Analysis. Building on this, we construct ANCOVA-style models that incorporate lifestyle, health, and background variables, and explore interaction effects and nonlinear terms. After evaluating assumptions through residual diagnostics, VIF, the Breusch-Pagan test, and Cook’s Distance, we assess model improvements via stepwise selection, Box-Cox transformation, and regularization methods. While LASSO offered minimal benefit, Ridge regression improved generalization performance, achieving a cross-validated R² of 0.62. The final model highlights key predictors such as study effort, mental health, exercise frequency, and a significant interaction between part-time job status and study behavior. This comprehensive modeling pipeline balances interpretability and predictive power while satisfying core regression assumptions.
