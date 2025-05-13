@@ -10,10 +10,10 @@ library(lmtest)
 library(glmnet)
 
 
+# === Load data and preprocess ===
 data <- read_csv("C:/Users/Jackw/OneDrive/桌面/STAT425/FF425/StudentsHabits.csv")
 
-
-
+# Recode categorical variables to numeric for modeling
 datamutate <- data %>%
   mutate(
     gender = recode(gender, "Male" = 0,"Female" = 1, "Other" = 0),
@@ -23,41 +23,36 @@ datamutate <- data %>%
   )
 
 
-
-model = lm(exam_score ~ age + study_hours_per_day+
-             social_media_hours+
-             netflix_hours+
-             attendance_percentage+
-             sleep_hours
-           , data = datamutate)
+# === Initial full and reduced models ===
+model = lm(exam_score ~ age + study_hours_per_day + social_media_hours +
+             netflix_hours + attendance_percentage + sleep_hours,
+           data = datamutate)
 summary(model)
-reduced = lm(exam_score ~ study_hours_per_day+
-               social_media_hours+
-               attendance_percentage+
-               sleep_hours
-             , data = datamutate)
-anova(reduced,model)
+
+# Drop age and netflix_hours to test their importance
+reduced = lm(exam_score ~ study_hours_per_day + social_media_hours +
+               attendance_percentage + sleep_hours,
+             data = datamutate)
+anova(reduced, model)
 
 
-
-
-
-
+# === Full ANCOVA-style model without PCA ===
 model_ancovare <- lm(
   exam_score ~ 
-    study_hours_per_day + social_media_hours +
-    attendance_percentage + sleep_hours +
+    study_hours_per_day + social_media_hours + attendance_percentage + sleep_hours +
     diet_quality + exercise_frequency + parental_education_level + 
     mental_health_rating + internet_quality +
     extracurricular_participation + part_time_job + gender,
   data = datamutate
 )
-
 summary(model_ancovare)
 
+# Stepwise AIC model selection
 step_model <- stepAIC(model_ancovare, direction = "both")
 summary(step_model)
 
+
+# === Polynomial (cubic) regression model ===
 cubic <- lm(
   exam_score ~ 
     study_hours_per_day + I(study_hours_per_day^2) + I(study_hours_per_day^3) +
@@ -72,9 +67,10 @@ cubic <- lm(
     extracurricular_participation + part_time_job + gender,
   data = datamutate
 )
-
 summary(cubic)
 
+
+# === Interaction ANCOVA model with useful higher-degree terms ===
 model_interaction_refined <- lm(
   exam_score ~ (
     study_hours_per_day + I(study_hours_per_day^3) +   # keep cubic for study time
@@ -89,65 +85,59 @@ model_interaction_refined <- lm(
   )^2,  # all pairwise interactions
   data = datamutate
 )
-
 summary(model_interaction_refined)
 
+# Stepwise selection from interaction model
 selected <- stepAIC(model_interaction_refined, direction = "both", trace = TRUE)
 summary(selected)
 AIC(selected)
 
+# Diagnostic plots for stepwise-selected model
 par(mfrow = c(2, 2))
 plot(selected)
 
+# Box-Cox transformation plot
 boxcox(selected, lambda = seq(0, 4, 0.1))
 
 
+# === Apply Box-Cox transformation ===
 lambda <- 3.2
+# Create Box-Cox transformed target variable
 datamutate$exam_score_bc <- (datamutate$exam_score^lambda - 1) / lambda
 
-
+# Refit interaction model using Box-Cox transformed response
 model_interactionbx <- lm(
-  exam_score_bc ~ 
-    (
-      study_hours_per_day + I(study_hours_per_day^3) +   # keep cubic for study time
-        diet_quality + I(diet_quality^2) +                 # mild curvature
-        exercise_frequency +
-        parental_education_level +
-        mental_health_rating + I(mental_health_rating^2) + # allow mild nonlinearity
-        internet_quality +
-        extracurricular_participation +
-        part_time_job +
-        gender
-    )^2,
+  exam_score_bc ~ (
+    study_hours_per_day + I(study_hours_per_day^3) +
+      diet_quality + I(diet_quality^2) +
+      exercise_frequency + parental_education_level +
+      mental_health_rating + I(mental_health_rating^2) +
+      internet_quality + extracurricular_participation +
+      part_time_job + gender
+  )^2,
   data = datamutate
 )
-
 summary(model_interactionbx)
 
-
+# Stepwise model selection on transformed response
 model_selectedbx <- stepAIC(model_interactionbx, direction = "both", trace = TRUE)
-
-
-
 summary(model_selectedbx)
 
-
+# Diagnostic plots
 par(mfrow = c(2, 2))
 plot(model_selectedbx)
 
+# Breusch-Pagan test for heteroscedasticity
 bptest(model_selectedbx)
 
-
+# Shapiro-Wilk test for normality of residuals
 shapiro.test(residuals(model_selectedbx))
 
 
-#lasso
+# === LASSO on stepAIC-transformed interaction model ===
 # Generate model matrix from the selected AIC model
 X <- model.matrix(model_selectedbx)[, -1]  # drop intercept
 y <- datamutate$exam_score
-
-
-
 
 # Run LASSO (alpha = 1)
 cv_lasso <- cv.glmnet(X, y, alpha = 1)
@@ -158,6 +148,7 @@ y_hat <- predict(cv_lasso, newx = X, s = "lambda.min")
 lasso_r2 <- cor(y, y_hat)^2
 print(lasso_r2)
 
+# Residual diagnostics for LASSO
 y_hat_lasso <- predict(cv_lasso, newx = X, s = "lambda.min")
 resid_lasso <- y - y_hat_lasso
 
@@ -170,16 +161,20 @@ lasso_diag <- list(
 )
 class(lasso_diag) <- "lasso_diag"
 
+# Residual vs Fitted plot
 plot(y_hat_lasso, resid_lasso,
      xlab = "Fitted (LASSO)",
      ylab = "Residuals",
      main = "Residuals vs Fitted - LASSO")
 abline(h = 0, col = "red", lty = 2)
 
+# Q-Q plot for residuals
 qqnorm(resid_lasso, main = "Q-Q Plot - LASSO")
 qqline(resid_lasso, col = "red", lwd = 2)
 
+# Normality test for LASSO residuals
 shapiro.test(as.numeric(resid_lasso))
 
+# Breusch-Pagan test on LASSO residuals
 library(lmtest)
 bptest(resid_lasso ~ y_hat_lasso)
