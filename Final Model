@@ -1,0 +1,185 @@
+library(GGally)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(MASS)
+library(caret)
+library(olsrr)
+library(car)
+library(lmtest)
+library(glmnet)
+
+
+data <- read_csv("C:/Users/Jackw/OneDrive/桌面/STAT425/FF425/StudentsHabits.csv")
+
+
+
+datamutate <- data %>%
+  mutate(
+    gender = recode(gender, "Male" = 0,"Female" = 1, "Other" = 0),
+    diet_quality = recode(diet_quality, "Poor" = 0,"Fair" = 1, "Good" = 2),
+    parental_education_level = recode(parental_education_level, "None" = 0,"High School" = 1, "Bachelor" = 2,"Master" = 3),
+    internet_quality = recode(internet_quality, "Poor" = 0,"Average" = 1, "Good" = 2)
+  )
+
+
+
+model = lm(exam_score ~ age + study_hours_per_day+
+             social_media_hours+
+             netflix_hours+
+             attendance_percentage+
+             sleep_hours
+           , data = datamutate)
+summary(model)
+reduced = lm(exam_score ~ study_hours_per_day+
+               social_media_hours+
+               attendance_percentage+
+               sleep_hours
+             , data = datamutate)
+anova(reduced,model)
+
+
+
+
+
+
+model_ancovare <- lm(
+  exam_score ~ 
+    study_hours_per_day + social_media_hours +
+    attendance_percentage + sleep_hours +
+    diet_quality + exercise_frequency + parental_education_level + 
+    mental_health_rating + internet_quality +
+    extracurricular_participation + part_time_job + gender,
+  data = datamutate
+)
+
+summary(model_ancovare)
+
+step_model <- stepAIC(model_ancovare, direction = "both")
+summary(step_model)
+
+cubic <- lm(
+  exam_score ~ 
+    study_hours_per_day + I(study_hours_per_day^2) + I(study_hours_per_day^3) +
+    social_media_hours + I(social_media_hours^2) + I(social_media_hours^3) +
+    sleep_hours + I(sleep_hours^2) + I(sleep_hours^3) +
+    attendance_percentage + I(attendance_percentage^2) + I(attendance_percentage^3) +
+    diet_quality + I(diet_quality^2) +
+    exercise_frequency + I(exercise_frequency^2) +
+    parental_education_level + I(parental_education_level^2) +
+    mental_health_rating + I(mental_health_rating^2) +
+    internet_quality + I(internet_quality^2) +
+    extracurricular_participation + part_time_job + gender,
+  data = datamutate
+)
+
+summary(cubic)
+
+model_interaction_refined <- lm(
+  exam_score ~ (
+    study_hours_per_day + I(study_hours_per_day^3) +   # keep cubic for study time
+      diet_quality + I(diet_quality^2) +                 # mild curvature
+      exercise_frequency +
+      parental_education_level +
+      mental_health_rating + I(mental_health_rating^2) + # allow mild nonlinearity
+      internet_quality +
+      extracurricular_participation +
+      part_time_job +
+      gender
+  )^2,  # all pairwise interactions
+  data = datamutate
+)
+
+summary(model_interaction_refined)
+
+selected <- stepAIC(model_interaction_refined, direction = "both", trace = TRUE)
+summary(selected)
+AIC(selected)
+
+par(mfrow = c(2, 2))
+plot(selected)
+
+boxcox(selected, lambda = seq(0, 4, 0.1))
+
+
+lambda <- 3.2
+datamutate$exam_score_bc <- (datamutate$exam_score^lambda - 1) / lambda
+
+
+model_interactionbx <- lm(
+  exam_score_bc ~ 
+    (
+      study_hours_per_day + I(study_hours_per_day^3) +   # keep cubic for study time
+        diet_quality + I(diet_quality^2) +                 # mild curvature
+        exercise_frequency +
+        parental_education_level +
+        mental_health_rating + I(mental_health_rating^2) + # allow mild nonlinearity
+        internet_quality +
+        extracurricular_participation +
+        part_time_job +
+        gender
+    )^2,
+  data = datamutate
+)
+
+summary(model_interactionbx)
+
+
+model_selectedbx <- stepAIC(model_interactionbx, direction = "both", trace = TRUE)
+
+
+
+summary(model_selectedbx)
+
+
+par(mfrow = c(2, 2))
+plot(model_selectedbx)
+
+bptest(model_selectedbx)
+
+
+shapiro.test(residuals(model_selectedbx))
+
+
+#lasso
+# Generate model matrix from the selected AIC model
+X <- model.matrix(model_selectedbx)[, -1]  # drop intercept
+y <- datamutate$exam_score
+
+
+
+
+# Run LASSO (alpha = 1)
+cv_lasso <- cv.glmnet(X, y, alpha = 1)
+
+# View optimal lambda and R²
+cv_lasso$lambda.min
+y_hat <- predict(cv_lasso, newx = X, s = "lambda.min")
+lasso_r2 <- cor(y, y_hat)^2
+print(lasso_r2)
+
+y_hat_lasso <- predict(cv_lasso, newx = X, s = "lambda.min")
+resid_lasso <- y - y_hat_lasso
+
+lasso_diag <- list(
+  fitted.values = y_hat_lasso,
+  residuals = resid_lasso,
+  y = y,
+  X = X,
+  lambda = cv_lasso$lambda.min
+)
+class(lasso_diag) <- "lasso_diag"
+
+plot(y_hat_lasso, resid_lasso,
+     xlab = "Fitted (LASSO)",
+     ylab = "Residuals",
+     main = "Residuals vs Fitted - LASSO")
+abline(h = 0, col = "red", lty = 2)
+
+qqnorm(resid_lasso, main = "Q-Q Plot - LASSO")
+qqline(resid_lasso, col = "red", lwd = 2)
+
+shapiro.test(as.numeric(resid_lasso))
+
+library(lmtest)
+bptest(resid_lasso ~ y_hat_lasso)
